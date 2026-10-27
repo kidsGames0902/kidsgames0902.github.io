@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport-fit=cover lets the game use the whole phone screen (around notches too) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Memory Adventure</title>
+
+  <style>
+    /* Our fun fonts, stored inside the game so they work offline */
+    @font-face {
+      font-family: 'Fredoka';
+      src: url('fonts/fredoka.woff2') format('woff2');
+      font-weight: 300 700;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Luckiest Guy';
+      src: url('fonts/luckiest-guy.woff2') format('woff2');
+      font-display: swap;
+    }
+
+    /* Make the page fill the window and center the game */
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(180deg, #90e0ef 0%, #caf0f8 60%, #fff3b0 100%);
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #game {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* The game is made for a sideways (landscape) screen. On a phone held upright
+       we ask the player to turn it, and main.js pauses the game meanwhile. */
+    #rotate {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 24px;
+      text-align: center;
+      background: linear-gradient(180deg, #48cae4 0%, #caf0f8 60%, #fff3b0 100%);
+      color: #05668d;
+      font: 600 26px 'Fredoka', 'Trebuchet MS', sans-serif;
+    }
+    #rotate .phone {
+      font-size: 96px;
+      animation: turn 2s ease-in-out infinite;
+    }
+    @keyframes turn {
+      0%, 30% { transform: rotate(0deg); }
+      60%, 100% { transform: rotate(-90deg); }
+    }
+    @media (orientation: portrait) and (pointer: coarse) {
+      #rotate { display: flex; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Phaser draws the game inside this div -->
+  <div id="game"></div>
+
+  <!-- Shown instead of the game when a phone is held upright -->
+  <div id="rotate">
+    <div class="phone">📱</div>
+    <div>Turn your phone sideways to play!</div>
+  </div>
+
+  <!-- 1. The Phaser game library (stored in the game folder, works offline) -->
+  <script src="lib/phaser.min.js"></script>
+
+  <!-- 2. Shared helpers: sounds/music, UI pieces, ads, and the list of levels -->
+  <script src="js/SoundManager.js"></script>
+  <script src="js/UI.js"></script>
+  <script src="js/Ads.js"></script>
+  <script src="js/levels.js"></script>
+
+  <!-- 3. Our scenes (each scene is one "screen" of the game) -->
+  <script src="js/HomeScene.js"></script>
+  <script src="js/MapScene.js"></script>
+  <script src="js/LevelScene.js"></script>
+
+  <!-- 4. Start the game (must be loaded last) -->
+  <script src="js/main.js"></script>
+</body>
+</html>
