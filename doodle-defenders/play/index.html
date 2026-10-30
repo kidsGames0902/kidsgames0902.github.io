@@ -1,0 +1,1500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Doodle Defenders</title>
+<style>
+  /* Bundled (not Google Fonts) so the game works offline in the Android app */
+  @font-face {
+    font-family: 'Patrick Hand';
+    src: url('fonts/patrick-hand.woff2') format('woff2');
+    font-display: swap;
+  }
+  :root {
+    --paper: #e3eec0;
+    --ink: #2b2d42;
+    --accent: #ff6b6b;
+    --good: #2a9d8f;
+    --card: #fffdf7;
+    --sun: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--paper); color: var(--ink);
+    font-family: 'Patrick Hand', 'Comic Sans MS', cursive;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { display: block; touch-action: none; cursor: crosshair; }
+  button { font: inherit; color: var(--ink); cursor: pointer; }
+  button:focus-visible { outline: 3px dashed #3a86ff; outline-offset: 3px; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px; font-size: 20px; pointer-events: none;
+  }
+  #hud.hidden { display: none; }
+  .pill {
+    background: var(--card); border: 2px solid var(--ink); border-radius: 12px;
+    padding: 2px 10px; white-space: nowrap; box-shadow: 2px 2px 0 var(--ink);
+  }
+  #houses span { display: inline-block; transition: opacity .3s, filter .3s, transform .3s; }
+  #houses span.gone { opacity: .3; filter: grayscale(1); transform: scale(.8); }
+  #inkWrap { flex: 1; min-width: 130px; max-width: 280px; display: flex; align-items: center; gap: 6px; }
+  #inkBar { flex: 1; height: 14px; border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; background: #fff; }
+  #inkFill { display: block; height: 100%; width: 100%; background: #3a86ff; transition: background .2s; }
+  #inkFill.low { background: var(--accent); }
+  #inkWrap.shake { animation: shake .35s; }
+  @keyframes shake { 20%,60% { transform: translateX(-5px); } 40%,80% { transform: translateX(5px); } }
+  .iconBtn {
+    pointer-events: auto; min-width: 44px; height: 40px; font-size: 20px;
+    background: var(--card); border: 2px solid var(--ink); border-radius: 12px; box-shadow: 2px 2px 0 var(--ink);
+  }
+  #hudBtns { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- coach (tutorial + tips) ---------- */
+  #coach {
+    position: fixed; left: 50%; top: calc(64px + env(safe-area-inset-top)); transform: translateX(-50%);
+    width: min(460px, calc(100% - 32px)); text-align: center;
+    background: var(--card); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 4px 4px 0 var(--ink);
+    padding: 10px 14px; pointer-events: none; transition: opacity .25s;
+  }
+  #coach.hidden { opacity: 0; }
+  #coachStep { font-size: 15px; opacity: .7; }
+  #coachText { font-size: 24px; line-height: 1.1; }
+  #coachSub { font-size: 18px; color: #6c5ce7; min-height: 0; margin-top: 2px; }
+  #coachSub:empty { display: none; }
+  #skipBtn {
+    pointer-events: auto; margin-top: 6px; font-size: 16px; background: none; border: none; text-decoration: underline; opacity: .7;
+    min-height: 32px;
+  }
+  #skipBtn.hidden { display: none; }
+
+  /* ---------- overlays ---------- */
+  .overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(253, 250, 242, .78);
+  }
+  .overlay.hidden { display: none; }
+  .card {
+    background: var(--card); border: 3px solid var(--ink); border-radius: 18px;
+    box-shadow: 6px 6px 0 var(--ink); padding: 22px 24px; max-width: 480px; width: 100%;
+    text-align: center; max-height: 100%; overflow: auto;
+    animation: pop .3s cubic-bezier(.3, 1.6, .5, 1);
+  }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } }
+  h1 { margin: 0; font-size: 48px; line-height: 1; transform: rotate(-2deg); }
+  h1 span { color: var(--accent); }
+  .sub { font-size: 21px; margin: 10px 0 16px; }
+  .moves { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .move { width: 92px; border: 2px dashed #b8c0cc; border-radius: 12px; padding: 6px 4px; font-size: 16px; line-height: 1.1; }
+  .move svg { display: block; margin: 0 auto 2px; }
+  .move b { font-size: 18px; display: block; }
+  .btns { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 14px; }
+  button.play {
+    font-size: 30px; padding: 6px 40px; min-height: 56px;
+    background: var(--sun); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 4px 4px 0 var(--ink);
+  }
+  button.play:active, button.ghost:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+  button.ghost {
+    font-size: 21px; padding: 4px 22px; min-height: 44px;
+    background: var(--card); border: 2px solid var(--ink); border-radius: 12px; box-shadow: 3px 3px 0 var(--ink);
+  }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .best { font-size: 19px; margin: 10px 0 0; opacity: .85; }
+  .best:empty { display: none; }
+
+  .bigScore { font-size: 64px; line-height: 1; margin: 10px 0 0; }
+  .badge {
+    display: inline-block; background: var(--sun); border: 2px solid var(--ink); border-radius: 10px;
+    padding: 0 10px; font-size: 20px; transform: rotate(-3deg); margin-top: 6px;
+  }
+  .badge.hidden { display: none; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .stat { border: 2px dashed #b8c0cc; border-radius: 12px; padding: 6px 2px; }
+  .stat b { display: block; font-size: 28px; line-height: 1; }
+  .stat span { font-size: 15px; opacity: .8; }
+  .tip { font-size: 19px; background: #eef6ff; border-radius: 12px; padding: 8px 12px; margin: 10px 0 0; }
+
+  @media (max-width: 420px) {
+    #hud { font-size: 17px; gap: 6px; }
+    #coach { top: calc(104px + env(safe-area-inset-top)); }
+    h1 { font-size: 40px; }
+    .move { width: 80px; font-size: 14px; }
+  }
+  /* phone landscape: squeeze the cards so every button fits without scrolling */
+  @media (max-height: 500px) {
+    .overlay { padding: 8px; }
+    .card { padding: 10px 18px; max-width: 620px; }
+    h1 { font-size: 34px; }
+    .sub { font-size: 18px; margin: 4px 0 8px; }
+    .move { padding: 3px 4px; }
+    .move svg { height: 24px; }
+    .bigScore { font-size: 40px; margin-top: 4px; }
+    .stats { margin: 8px 0 4px; }
+    .stat b { font-size: 22px; }
+    .tip { font-size: 16px; padding: 4px 10px; margin-top: 6px; }
+    .best { margin-top: 4px; }
+    .btns { flex-direction: row; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+    button.play { font-size: 24px; min-height: 46px; padding: 4px 28px; }
+    #coach { top: calc(52px + env(safe-area-inset-top)); padding: 6px 12px; }
+    #coachText { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <span id="houses" class="pill" aria-label="Houses left"></span>
+  <span class="pill">Wave <b id="wave">1</b></span>
+  <span class="pill">⭐ <b id="score">0</b></span>
+  <span id="inkWrap" class="pill">✏️<span id="inkBar"><span id="inkFill"></span></span></span>
+  <span id="hudBtns">
+    <button class="iconBtn" id="pauseBtn" aria-label="Pause">⏸</button>
+    <button class="iconBtn" id="muteBtn" aria-label="Toggle sound">🔊</button>
+  </span>
+</div>
+
+<div id="coach" class="hidden" role="status" aria-live="polite">
+  <div id="coachStep"></div>
+  <div id="coachText"></div>
+  <div id="coachSub"></div>
+  <button id="skipBtn" class="hidden">Skip tutorial</button>
+</div>
+
+<div id="start" class="overlay">
+  <div class="card">
+    <h1>Doodle <span>Defenders</span></h1>
+    <p class="sub">Monsters are marching on your village.<br>Draw to stop them!</p>
+    <div class="moves" aria-label="Moves">
+      <div class="move">
+        <svg width="54" height="34" viewBox="0 0 54 34"><path d="M6 26 L48 10" stroke="#8d5524" stroke-width="7" stroke-linecap="round" fill="none"/></svg>
+        <b>Line</b>Wall
+      </div>
+      <div class="move">
+        <svg width="54" height="34" viewBox="0 0 54 34"><ellipse cx="27" cy="17" rx="20" ry="13" stroke="#ff4d8d" stroke-width="4" fill="none"/><circle cx="27" cy="17" r="5" fill="#52b788" stroke="#2b2d42" stroke-width="2"/></svg>
+        <b>Circle</b>Lasso
+      </div>
+      <div class="move">
+        <svg width="54" height="34" viewBox="0 0 54 34"><path d="M4 26 L16 6 L26 26 L38 6 L50 26" stroke="#f8961e" stroke-width="5" stroke-linejoin="round" fill="none"/></svg>
+        <b>Zigzag</b>Zap
+      </div>
+      <div class="move">
+        <svg width="54" height="34" viewBox="0 0 54 34"><circle cx="27" cy="17" r="5" fill="#2b2d42"/><circle cx="27" cy="17" r="12" stroke="#2b2d42" stroke-width="2" fill="none" stroke-dasharray="4 4"/></svg>
+        <b>Tap</b>Poke
+      </div>
+    </div>
+    <div class="btns">
+      <button class="play" id="playBtn">Play!</button>
+      <button class="ghost" id="howBtn">How to play</button>
+    </div>
+    <p class="best" id="bestStart"></p>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="card">
+    <h1>Paused</h1>
+    <div class="btns">
+      <button class="play" id="resumeBtn">Resume</button>
+      <div class="row">
+        <button class="ghost" id="restartBtn">Restart</button>
+        <button class="ghost" id="pauseHowBtn">How to play</button>
+        <button class="ghost" id="pauseMenuBtn">Menu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="card">
+    <h1>Village <span>Overrun!</span></h1>
+    <div class="bigScore">⭐ <b id="finalScore">0</b></div>
+    <div id="newBest" class="badge hidden">🏆 New best score!</div>
+    <div class="stats">
+      <div class="stat"><b id="stWave">1</b><span>wave reached</span></div>
+      <div class="stat"><b id="stKills">0</b><span>monsters beaten</span></div>
+      <div class="stat"><b id="stCombo">0</b><span>best combo</span></div>
+    </div>
+    <p class="tip" id="tip"></p>
+    <p class="best" id="bestOver"></p>
+    <div class="btns">
+      <button class="play" id="againBtn">Play again</button>
+      <button class="ghost" id="overMenuBtn">Menu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const cvs = document.getElementById('game');
+  let ctx = cvs.getContext('2d'); // swapped briefly to paint the cached background
+  const $ = id => document.getElementById(id);
+  const FONT = "'Patrick Hand', 'Comic Sans MS', cursive";
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // W is the page (playfield) width; on wide screens the page lies on a desk, offset by FX
+  let W = 0, H = 0, VW = 0, FX = 0;
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    VW = innerWidth; H = innerHeight;
+    W = VW > 900 ? Math.round(Math.min(VW, Math.max(700, H * 0.85))) : VW;
+    FX = Math.round((VW - W) / 2);
+    cvs.width = VW * dpr; cvs.height = H * dpr;
+    cvs.style.width = VW + 'px'; cvs.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const hud = document.getElementById('hud');
+    hud.style.left = hud.style.right = FX + 'px';
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  const villageY = () => H - 90;
+  // Top of the playfield = bottom of the HUD, so monsters never spawn hidden behind it
+  let fieldTop = 0;
+  const hudEl = document.getElementById('hud');
+  new ResizeObserver(() => { fieldTop = hudEl.classList.contains('hidden') ? 0 : hudEl.getBoundingClientRect().bottom; }).observe(hudEl);
+  const spawnY = () => fieldTop ? fieldTop + 22 : -30;
+  // monsters cross short screens (phone landscape) slower, so every screen gives about the same reaction time
+  const speedScale = () => Math.max(0.45, Math.min(1.15, (villageY() - spawnY()) / 640));
+  const MAX_HP = 5, MAX_INK = 100;
+  const POKE_INK = 6, POKE_LEN = 28;
+  const houseX = i => (i + 0.5) * W / MAX_HP;
+
+  const TYPES = {
+    blob:   { r: 18, speed: 34, hp: 1, color: '#52b788', pts: 10, name: 'Blob' },
+    runner: { r: 13, speed: 72, hp: 1, color: '#f4a261', pts: 15, name: 'Runner', intro: 'Super fast! A wall stops it cold.' },
+    tank:   { r: 26, speed: 20, hp: 4, color: '#9d4edd', pts: 40, name: 'Tank', intro: 'Takes 4 hits. A lasso does 3!' },
+    flyer:  { r: 16, speed: 42, hp: 1, color: '#4cc9f0', pts: 20, name: 'Flyer', intro: 'Flies OVER walls. Zap or lasso it!', fly: true },
+    boss:   { r: 36, speed: 15, hp: 10, color: '#e76f51', pts: 150, name: 'Boss', intro: 'Huge! Takes 10 hits. Wall it, then lasso and zap!' },
+  };
+  const NEW_AT = { 2: 'runner', 3: 'tank', 4: 'flyer', 5: 'boss' };
+
+  const KIND = {
+    wall:  { label: '🧱 Wall',  color: '#8d5524' },
+    lasso: { label: '⭕ Lasso', color: '#ff4d8d' },
+    zap:   { label: '⚡ Zap',   color: '#f8961e' },
+    poke:  { label: '👆 Poke',  color: '#2b2d42' },
+  };
+
+  // ---------- storage ----------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('dd_' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('dd_' + k, JSON.stringify(v)); } catch (e) {} },
+  };
+
+  // ---------- sound + haptics ----------
+  let AC = null, muted = store.get('muted', false);
+  function initAudio() {
+    if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (AC && AC.state === 'suspended') AC.resume();
+  }
+  function beep(freq, dur, type = 'sine', vol = 0.15, slide = 0) {
+    if (!AC || muted) return;
+    const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(AC.destination);
+    o.start(t); o.stop(t + dur);
+  }
+  const sfx = {
+    pop:   () => beep(520 + Math.random() * 200, 0.14, 'triangle', 0.2, 2.2),
+    wall:  () => beep(140, 0.18, 'square', 0.1, 0.6),
+    lasso: () => { beep(330, 0.25, 'sine', 0.15, 2); beep(495, 0.25, 'sine', 0.08, 2); },
+    zap:   () => { beep(900, 0.3, 'sawtooth', 0.09, 0.15); beep(60, 0.3, 'square', 0.08, 0.5); },
+    poke:  () => beep(800, 0.06, 'triangle', 0.1),
+    ouch:  () => beep(220, 0.45, 'sawtooth', 0.15, 0.3),
+    wave:  () => { beep(523, 0.12, 'triangle', 0.12); setTimeout(() => beep(784, 0.18, 'triangle', 0.12), 110); },
+    win:   () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.15, 'triangle', 0.12), i * 90)); },
+    empty: () => beep(120, 0.08, 'square', 0.06),
+    shape: () => beep(1200, 0.04, 'sine', 0.05),
+  };
+  function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+  function setMuteIcon() { $('muteBtn').textContent = muted ? '🔇' : '🔊'; }
+  $('muteBtn').addEventListener('click', () => { muted = !muted; store.set('muted', muted); setMuteIcon(); });
+  setMuteIcon();
+
+  // ---------- geometry ----------
+  const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+  function distToSeg(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(ax + t * dx - px, ay + t * dy - py);
+  }
+  function distToPoly(px, py, pts) {
+    if (pts.length === 1) return Math.hypot(px - pts[0].x, py - pts[0].y);
+    let m = Infinity;
+    for (let i = 1; i < pts.length; i++) m = Math.min(m, distToSeg(px, py, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y));
+    return m;
+  }
+  function pointInPoly(x, y, pts) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i], b = pts[j];
+      if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
+  }
+  // Ramer-Douglas-Peucker simplification: keeps only the "important" corners of a stroke
+  function rdp(pts, eps) {
+    if (pts.length < 3) return pts.slice();
+    const a = pts[0], b = pts[pts.length - 1];
+    let maxD = 0, idx = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const d = distToSeg(pts[i].x, pts[i].y, a.x, a.y, b.x, b.y);
+      if (d > maxD) { maxD = d; idx = i; }
+    }
+    if (maxD > eps) return rdp(pts.slice(0, idx + 1), eps).slice(0, -1).concat(rdp(pts.slice(idx), eps));
+    return [a, b];
+  }
+  function resample(pts, step) {
+    const out = [{ x: pts[0].x, y: pts[0].y }];
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      let a = pts[i - 1], b = pts[i], d = dist(a, b);
+      while (acc + d >= step && d > 0) {
+        const t = (step - acc) / d;
+        const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        out.push(p); a = p; d = dist(a, b); acc = 0;
+      }
+      acc += d;
+    }
+    const last = pts[pts.length - 1];
+    if (dist(out[out.length - 1], last) > 1) out.push({ x: last.x, y: last.y });
+    return out;
+  }
+  function countCorners(pts, eps) {
+    const s = rdp(pts, eps);
+    let c = 0;
+    for (let i = 1; i < s.length - 1; i++) {
+      const v1x = s[i].x - s[i - 1].x, v1y = s[i].y - s[i - 1].y;
+      const v2x = s[i + 1].x - s[i].x, v2y = s[i + 1].y - s[i].y;
+      const l = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y);
+      if (!l) continue;
+      const ang = Math.acos(Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / l)));
+      if (ang > 1.0) c++;
+    }
+    return c;
+  }
+  // Total signed turning in radians: ~2π for a circle, ~0 for a zigzag (its turns cancel out)
+  function turning(pts) {
+    const s = resample(pts, 10);
+    let sum = 0, prev = null;
+    for (let i = 1; i < s.length; i++) {
+      const a = Math.atan2(s[i].y - s[i - 1].y, s[i].x - s[i - 1].x);
+      if (prev !== null) { const d = a - prev; sum += d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI; }
+      prev = a;
+    }
+    return sum;
+  }
+  // Same rules are used for the live preview and the final shape, so what you see is what you get
+  function classify(pts, len) {
+    if (len < POKE_LEN) return 'poke';
+    const d = dist(pts[0], pts[pts.length - 1]);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of pts) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); }
+    const size = Math.min(maxX - minX, maxY - minY), diag = Math.hypot(maxX - minX, maxY - minY);
+    // smaller strokes get a finer simplification so small zigzags keep their corners
+    const corners = countCorners(pts, Math.max(6, Math.min(12, diag * 0.08)));
+    const turn = Math.abs(turning(pts));
+    if (corners >= 3 && turn < Math.PI) return 'zap';
+    // a lasso either closes (end near start) or wraps most of the way round (an unclosed circle still counts)
+    const closed = d < Math.min(80, Math.max(40, len * 0.2));
+    if (len > 110 && size > 35 && (closed || (turn > Math.PI * 1.5 && d < len * 0.3))) return 'lasso';
+    // zigzag turns go both ways; a one-way curve with corners is just a bent wall
+    if (corners >= 2 && turn < Math.PI) return 'zap';
+    return 'wall';
+  }
+
+  // ---------- state ----------
+  let mode = 'menu';   // menu | tutorial | play | paused | over
+  let S;
+  function newState() {
+    return {
+      score: 0, wave: 0, hp: MAX_HP, ink: MAX_INK, houses: Array(MAX_HP).fill(true),
+      monsters: [], walls: [], fx: [], particles: [], labels: [],
+      toSpawn: 0, spawnTimer: 0, between: true, waveDelay: 1.2, intro: null, shake: 0,
+      best: store.get('best', 0),
+      stats: { kills: 0, bestCombo: 0, moves: { wall: 0, lasso: 0, zap: 0, poke: 0 }, leaks: {} },
+      tut: null, prevMode: null,
+    };
+  }
+  S = newState();
+
+  function addLabel(x, y, text, color = '#2b2d42', size = 28, dur = 1) {
+    // labels float up ~40px, so keep them far enough below the HUD to stay readable
+    S.labels.push({ x, y: Math.max(y, fieldTop + 44), text, color, size, t: 0, dur });
+  }
+  function burst(x, y, color, n = 14, speed = 220) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7);
+      S.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, r: 2 + Math.random() * 4, color, life: 0.5 + Math.random() * 0.4 });
+    }
+  }
+  function shake(n) { if (!reducedMotion) S.shake = Math.max(S.shake, n); }
+
+  function makeMonster(type, x, y, extra = {}) {
+    const T = TYPES[type];
+    return Object.assign({
+      type, r: T.r, x, y, speed: T.speed, hp: T.hp, maxHp: T.hp,
+      wob: Math.random() * 10, t: Math.random() * 5, stun: 0, hit: 0, blocked: false, dead: false, frozen: false,
+    }, extra);
+  }
+
+  // ---------- coach ----------
+  let coachTimer = 0;
+  function setCoach(text, sub = '', step = '', ttl = 0, skip = false) {
+    $('coachText').textContent = text;
+    $('coachSub').textContent = sub;
+    $('coachStep').textContent = step;
+    $('skipBtn').classList.toggle('hidden', !skip);
+    $('coach').classList.remove('hidden');
+    coachTimer = ttl;
+  }
+  function setCoachSub(sub) { $('coachSub').textContent = sub; }
+  function hideCoach() { $('coach').classList.add('hidden'); coachTimer = 0; }
+
+  // ---------- tutorial ----------
+  // the first step's monster starts just below the coach card so it's visible from the start
+  const tutTop = () => Math.max(fieldTop, $('coach').getBoundingClientRect().bottom) + 40;
+  const TUT = [
+    {
+      text: 'Draw a LINE in front of the monster',
+      want: 'wall', success: 'Walls hold monsters back for a while.',
+      hint: 'Just drag one straight line across its path.',
+      miss: 'Draw it BELOW the monster, across its path.',
+      setup() { const y = tutTop(); S.monsters.push(makeMonster('blob', W / 2, y, { speed: 38, wob: 0, homeY: y })); },
+      demo() { const y = Math.max(H * 0.5, S.monsters[0] ? S.monsters[0].homeY + 110 : 0); return linePts(W / 2 - 120, y, W / 2 + 120, y); },
+    },
+    {
+      text: 'Draw a CIRCLE around the monsters',
+      want: 'lasso', success: 'Lassos hit everything inside. Catch many for a combo!',
+      hint: 'Go all the way around and finish where you started.',
+      miss: 'Make sure the circle goes around the monsters.',
+      setup() {
+        S.monsters.push(makeMonster('blob', W / 2 - 26, H * 0.44, { frozen: true }));
+        S.monsters.push(makeMonster('blob', W / 2 + 26, H * 0.47, { frozen: true }));
+      },
+      demo() {
+        const pts = [];
+        for (let i = 0; i <= 64; i++) { const a = -Math.PI / 2 + i / 64 * Math.PI * 2.08; pts.push({ x: W / 2 + Math.cos(a) * 90, y: H * 0.455 + Math.sin(a) * 72 }); }
+        return pts;
+      },
+    },
+    {
+      text: 'Draw a ZIGZAG through the monsters',
+      want: 'zap', success: 'Zaps hit AND stun everything they touch.',
+      hint: 'Make sharp back-and-forth turns, like ⚡.',
+      miss: 'Make sure the zigzag touches the monsters.',
+      setup() {
+        const sp = Math.min(90, W * 0.22);
+        for (const dx of [-sp, 0, sp]) S.monsters.push(makeMonster('blob', W / 2 + dx, H * 0.44, { frozen: true }));
+      },
+      demo() {
+        const sp = Math.min(90, W * 0.22), x0 = W / 2 - sp * 1.5, seg = sp * 3 / 6, pts = [];
+        for (let k = 0; k < 6; k++) {
+          const a = { x: x0 + k * seg, y: H * 0.44 + (k % 2 ? 45 : -45) }, b = { x: x0 + (k + 1) * seg, y: H * 0.44 + (k % 2 ? -45 : 45) };
+          pts.push(...linePts(a.x, a.y, b.x, b.y, 10));
+        }
+        return pts;
+      },
+    },
+    {
+      text: 'TAP a monster to poke it',
+      want: 'poke', success: 'Pokes are quick but cost ink. Save them for stragglers!',
+      hint: 'Just tap right on top of it.',
+      miss: 'Tap right on top of the monster.',
+      setup() { S.monsters.push(makeMonster('blob', W / 2, H * 0.45, { frozen: true })); },
+      demo() { return [{ x: W / 2, y: H * 0.45 }, { x: W / 2, y: H * 0.45 }]; },
+    },
+  ];
+  function linePts(x1, y1, x2, y2, n = 40) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) pts.push({ x: x1 + (x2 - x1) * i / n, y: y1 + (y2 - y1) * i / n });
+    return pts;
+  }
+
+  function setupStep() {
+    for (const m of S.monsters) burst(m.x, m.y, TYPES[m.type].color, 10);
+    S.monsters = []; S.walls = [];
+    const st = TUT[S.tut.step];
+    // coach first: step setup measures the card to place monsters below it
+    setCoach(st.text, '', `Step ${S.tut.step + 1} of ${TUT.length}`, 0, true);
+    st.setup();
+    S.tut.demoT = 0;
+  }
+  function tutorialResult(kind, hits) {
+    if (mode !== 'tutorial' || S.tut.wait > 0) return;
+    const st = TUT[S.tut.step];
+    if (kind === st.want && hits > 0) {
+      S.tut.wait = 1.8;
+      sfx.win(); buzz(30);
+      setCoach('Great job! ✨', st.success, `Step ${S.tut.step + 1} of ${TUT.length}`, 0, true);
+    } else if (kind === st.want) {
+      setCoachSub(`So close! ${st.miss}`);
+    } else {
+      setCoachSub(`That made a ${KIND[kind].label}. ${st.hint}`);
+    }
+  }
+  function updateTutorial(dt) {
+    S.ink = MAX_INK;
+    const tu = S.tut;
+    tu.demoT += dt;
+    if (tu.wait > 0) {
+      tu.wait -= dt;
+      if (tu.wait <= 0) {
+        tu.step++;
+        if (tu.step >= TUT.length) { store.set('tutDone', true); startPlay(true); return; }
+        setupStep();
+      }
+    }
+    updateMonsters(dt);
+    updateWalls(dt);
+  }
+
+  // ---------- waves ----------
+  function startWave() {
+    S.wave++;
+    S.toSpawn = 4 + S.wave * 2;
+    S.spawnTimer = 0.3;
+    S.intro = null;
+    addLabel(W / 2, H * 0.42, `Wave ${S.wave}!`, '#e76f51', 54, 1.3);
+    sfx.wave();
+  }
+  function pickType(w) {
+    const pool = ['blob', 'blob'];
+    if (w >= 2) pool.push('runner');
+    if (w >= 3) pool.push('tank');
+    if (w >= 4) pool.push('flyer', 'runner');
+    if (w >= 6) pool.push('tank', 'flyer');
+    return pool[Math.random() * pool.length | 0];
+  }
+  // returns how many monsters were spawned
+  function spawn() {
+    const w = S.wave, first = NEW_AT[w] || (w % 5 === 0 ? 'boss' : null);
+    // A brand-new type (or every 5th wave's boss) always shows up first so the intro card matches what you see
+    const t = first && !S.spawnedNew ? first : pickType(w), r = TYPES[t].r;
+    // from wave 3, small monsters sometimes come in packs of 3: a perfect lasso target
+    const n = S.spawnedNew && w >= 3 && TYPES[t].hp === 1 && Math.random() < 0.25 ? Math.min(3, S.toSpawn) : 1;
+    S.spawnedNew = true;
+    const x0 = r + 20 + Math.random() * (W - 2 * r - 40);
+    for (let k = 0; k < n; k++) {
+      const x = Math.max(r + 4, Math.min(W - r - 4, x0 + (k - (n - 1) / 2) * 34));
+      S.monsters.push(makeMonster(t, x, spawnY() - (k % 2) * 12, {
+        speed: TYPES[t].speed * Math.min(1.7, 0.9 + 0.08 * (w - 1)) * (0.85 + Math.random() * 0.3),
+      }));
+    }
+    return n;
+  }
+
+  // ---------- combat ----------
+  function hurt(m, dmg) {
+    if (m.dead) return false;
+    m.hp -= dmg; m.hit = 0.15;
+    if (m.hp <= 0) {
+      m.dead = true;
+      const pts = TYPES[m.type].pts;
+      if (mode === 'play') { S.score += pts; S.stats.kills++; addLabel(m.x, m.y - 10, `+${pts}`, '#2a9d8f', 20, 0.8); }
+      burst(m.x, m.y, TYPES[m.type].color, 18);
+      sfx.pop();
+      return true;
+    }
+    burst(m.x, m.y, '#ffffff', 5, 120);
+    return false;
+  }
+  function combo(kills, x, y) {
+    S.stats.bestCombo = Math.max(S.stats.bestCombo, kills);
+    if (kills >= 2 && mode === 'play') {
+      const bonus = 25 * (kills - 1);
+      S.score += bonus;
+      addLabel(x, y - 36, `${kills}x COMBO! +${bonus}`, '#e76f51', 32, 1.3);
+      buzz(40);
+    }
+  }
+  function nearestHouse(x) {
+    let best = -1, bd = Infinity;
+    S.houses.forEach((up, i) => { if (up) { const d = Math.abs(houseX(i) - x); if (d < bd) { bd = d; best = i; } } });
+    return best;
+  }
+  function leak(m) {
+    m.dead = true;
+    const best = nearestHouse(m.x);
+    if (best >= 0) {
+      S.houses[best] = false;
+      burst(houseX(best), H - 40, '#9e9e9e', 26, 260);
+      burst(houseX(best), H - 40, '#e76f51', 10, 200);
+    }
+    S.hp--;
+    S.stats.leaks[m.type] = (S.stats.leaks[m.type] || 0) + 1;
+    shake(14); sfx.ouch(); buzz(120);
+    S.fx.push({ kind: 'redflash', t: 0, dur: 0.35 });
+    addLabel(best >= 0 ? houseX(best) : m.x, villageY() - 34, 'OUCH!', '#e63946', 32);
+    if (S.hp <= 0) gameOver();
+  }
+
+  // ---------- input ----------
+  let stroke = null;
+  const active = () => mode === 'play' || mode === 'tutorial';
+  function pos(e) { const r = cvs.getBoundingClientRect(); return { x: e.clientX - r.left - FX, y: e.clientY - r.top }; }
+
+  cvs.addEventListener('pointerdown', e => {
+    initAudio();
+    if (!active() || stroke) return;
+    if (mode === 'tutorial' && S.tut.wait > 0) return;
+    cvs.setPointerCapture(e.pointerId);
+    stroke = { pts: [pos(e)], len: 0, spent: 0, id: e.pointerId, kind: 'poke' };
+  });
+  cvs.addEventListener('pointermove', e => {
+    if (!stroke || e.pointerId !== stroke.id) return;
+    const p = pos(e), last = stroke.pts[stroke.pts.length - 1], d = dist(last, p);
+    if (d < 3) return;
+    const cost = d / 12;
+    if (S.ink < cost) { outOfInk(p); finishStroke(); return; }
+    S.ink -= cost; stroke.spent += cost;
+    stroke.len += d;
+    stroke.pts.push(p);
+    const k = classify(stroke.pts, stroke.len);
+    if (k !== stroke.kind && stroke.len > POKE_LEN) sfx.shape();
+    stroke.kind = k;
+  });
+  const endStroke = e => { if (stroke && e.pointerId === stroke.id) finishStroke(); };
+  cvs.addEventListener('pointerup', endStroke);
+  cvs.addEventListener('pointercancel', endStroke);
+  cvs.addEventListener('contextmenu', e => e.preventDefault());
+
+  function outOfInk(p) {
+    sfx.empty(); buzz(20);
+    addLabel(p.x, p.y - 30, 'out of ink!', '#ff6b6b', 22, 0.8);
+    const w = $('inkWrap');
+    w.classList.remove('shake'); void w.offsetWidth; w.classList.add('shake');
+  }
+
+  function finishStroke() {
+    const { pts, len, spent } = stroke;
+    stroke = null;
+    if (!active()) return;
+    const kind = classify(pts, len);
+    S.stats.moves[kind]++;
+    let hits = 0;
+    if (kind === 'poke') hits = poke(pts[0]);
+    else if (kind === 'lasso') hits = lasso(pts, spent);
+    else if (kind === 'zap') hits = zap(pts);
+    else hits = buildWall(pts);
+    tutorialResult(kind, hits);
+  }
+
+  // pokes cost more and reach less than drawing, so tapping alone can't carry a wave
+  function poke(p) {
+    if (S.ink < POKE_INK) { outOfInk(p); return 0; }
+    S.ink -= POKE_INK;
+    sfx.poke();
+    S.fx.push({ kind: 'ring', x: p.x, y: p.y, r: 16, t: 0, dur: 0.25 });
+    let kills = 0, hits = 0;
+    for (const m of S.monsters) {
+      if (m.dead || Math.hypot(m.x - p.x, m.y - p.y) >= m.r + 10) continue;
+      hits++;
+      if (hurt(m, 1)) kills++;
+      else if (!m.frozen) m.y = Math.max(spawnY(), m.y - 16); // tough monsters get knocked back a little
+    }
+    combo(kills, p.x, p.y);
+    return hits;
+  }
+
+  function lasso(pts, spent) {
+    sfx.lasso();
+    S.fx.push({ kind: 'lasso', pts, t: 0, dur: 0.55 });
+    let kills = 0, hits = 0, cx = 0, cy = 0;
+    for (const p of pts) { cx += p.x; cy += p.y; }
+    cx /= pts.length; cy /= pts.length;
+    for (const m of S.monsters) {
+      if (!m.dead && pointInPoly(m.x, m.y, pts)) { hits++; if (hurt(m, 3)) kills++; }
+    }
+    if (hits) addLabel(cx, cy, 'LASSO!', '#ff4d8d', 34);
+    else if (mode === 'play') {
+      // a missed lasso gives half the ink back so a mistake doesn't feel too punishing
+      S.ink = Math.min(MAX_INK, S.ink + spent * 0.5);
+      addLabel(cx, cy, 'missed! ½ ink back', '#5c6470', 22);
+    }
+    combo(kills, cx, cy);
+    return hits;
+  }
+
+  function zap(pts) {
+    sfx.zap(); shake(8); buzz(50);
+    S.fx.push({ kind: 'bolt', pts: rdp(pts, 6), t: 0, dur: 0.45 });
+    let kills = 0, hits = 0;
+    for (const m of S.monsters) {
+      if (!m.dead && distToPoly(m.x, m.y, pts) < m.r + 30) {
+        hits++; m.stun = 1.3;
+        if (hurt(m, 2)) kills++;
+      }
+    }
+    const mid = pts[pts.length >> 1];
+    addLabel(mid.x, mid.y, 'ZAP!', '#f8961e', 36);
+    combo(kills, mid.x, mid.y);
+    return hits;
+  }
+
+  function buildWall(pts) {
+    sfx.wall(); buzz(15);
+    const wpts = resample(pts, 12);
+    S.walls.push({ pts: wpts, hp: 100, life: 9, maxLife: 9 });
+    // how many walking monsters this wall is actually in front of
+    return S.monsters.filter(m => !m.dead && !TYPES[m.type].fly && wpts.some(p => p.y > m.y && Math.abs(p.x - m.x) < m.r)).length;
+  }
+
+  function wallHit(x, y, r) {
+    for (const w of S.walls) if (distToPoly(x, y, w.pts) < r + 6) return w;
+    return null;
+  }
+
+  // ---------- update ----------
+  function updateMonsters(dt) {
+    const vy = villageY(), sp = speedScale();
+    for (const m of S.monsters) {
+      m.t += dt;
+      m.hit = Math.max(0, m.hit - dt);
+      if (m.frozen || m.dead) continue;
+      if (m.stun > 0) { m.stun -= dt; continue; }
+      const T = TYPES[m.type];
+      const nx = Math.max(m.r, Math.min(W - m.r, m.x + Math.sin(m.t * 2 + m.wob) * 14 * dt));
+      const ny = m.y + m.speed * sp * dt;
+      const w = T.fly ? null : wallHit(nx, ny, m.r);
+      if (w) { w.hp -= dt * 22; m.blocked = true; }
+      else { m.x = nx; m.y = ny; m.blocked = false; }
+
+      if (m.y > vy) {
+        if (mode === 'play') { leak(m); if (mode !== 'play') return; }
+        else m.y = m.homeY ?? spawnY(); // tutorial and menu monsters just loop back to the top
+      }
+    }
+    S.monsters = S.monsters.filter(m => !m.dead);
+  }
+
+  function updateWalls(dt) {
+    for (const w of S.walls) {
+      w.life -= dt;
+      if (w.hp <= 0 && !w.broken) {
+        w.broken = true;
+        for (let i = 0; i < w.pts.length; i += 3) burst(w.pts[i].x, w.pts[i].y, '#8d5524', 3, 120);
+      }
+    }
+    S.walls = S.walls.filter(w => w.life > 0 && w.hp > 0);
+  }
+
+  function updatePlay(dt) {
+    S.ink = Math.min(MAX_INK, S.ink + dt * 7.5);
+
+    if (S.between) {
+      S.waveDelay -= dt;
+      if (S.waveDelay <= 0) { S.between = false; S.spawnedNew = false; startWave(); }
+    } else if (S.toSpawn > 0) {
+      S.spawnTimer -= dt;
+      if (S.spawnTimer <= 0) {
+        const n = spawn();
+        S.toSpawn -= n;
+        S.spawnTimer = Math.max(0.35, 1.6 - S.wave * 0.13) * (0.6 + Math.random() * 0.8) + (n > 1 ? 0.6 : 0);
+      }
+    } else if (S.monsters.length === 0) {
+      const bonus = S.wave * 20;
+      S.score += bonus;
+      S.ink = Math.min(MAX_INK, S.ink + 30);
+      S.between = true;
+      S.intro = NEW_AT[S.wave + 1] || null;
+      S.waveDelay = S.intro ? 3.6 : 2.2;
+      addLabel(W / 2, H * (S.intro ? 0.2 : 0.42), `Wave cleared! +${bonus}`, '#2a9d8f', 34, 1.6);
+      sfx.win();
+    }
+
+    updateMonsters(dt);
+    if (mode !== 'play') return;
+    updateWalls(dt);
+  }
+
+  // attract mode: a few monsters wander behind the menu
+  function updateMenu(dt) {
+    if (S.monsters.length < 5 && Math.random() < dt) {
+      const types = ['blob', 'runner', 'tank', 'flyer'];
+      const t = types[Math.random() * 4 | 0];
+      S.monsters.push(makeMonster(t, 40 + Math.random() * (W - 80), spawnY(), { speed: TYPES[t].speed * 0.7 }));
+    }
+    updateMonsters(dt);
+  }
+
+  function updateFx(dt) {
+    for (const f of S.fx) f.t += dt;
+    S.fx = S.fx.filter(f => f.t < f.dur);
+    for (const p of S.particles) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 500 * dt; }
+    S.particles = S.particles.filter(p => p.life > 0);
+    for (const l of S.labels) l.t += dt;
+    S.labels = S.labels.filter(l => l.t < l.dur);
+    S.shake = Math.max(0, S.shake - dt * 40);
+    if (coachTimer > 0) { coachTimer -= dt; if (coachTimer <= 0) hideCoach(); }
+  }
+
+  // ---------- render ----------
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function tracePath(pts, ox = 0, oy = 0) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x + ox, pts[0].y + oy);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x + ox, pts[i].y + oy);
+  }
+
+  // ---------- scene: a meadow between the monster forest and the village ----------
+  function rng(seed) {
+    return () => {
+      seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  // scenery is seeded so it stays put; it's only rebuilt when the screen size changes
+  let sceneKey = '', scene = null;
+  function getScene() {
+    const key = `${W}|${H}|${VW}|${fieldTop | 0}`;
+    if (key === sceneKey) return scene;
+    sceneKey = key;
+    const r = rng(7), top = fieldTop + 30, bot = villageY() - 12;
+    const patches = [], items = [], eyes = [], side = [];
+    for (let i = 0, n = Math.round(W * H / 40000); i < n; i++) {
+      patches.push({ x: r() * W, y: top + r() * (bot - top), rx: 50 + r() * 90, ry: 25 + r() * 40, light: r() < 0.5 });
+    }
+    // grass grows thicker towards the village
+    for (let i = 0, n = Math.round(W * (bot - top) / 9000); i < n; i++) {
+      const roll = r();
+      items.push({
+        kind: roll < 0.6 ? 'tuft' : roll < 0.82 ? 'flower' : roll < 0.94 ? 'rock' : 'mushroom',
+        x: 16 + r() * (W - 32), y: top + (bot - top) * (0.15 + 0.85 * Math.sqrt(r())),
+        s: 0.8 + r() * 0.5, color: ['#ff8fab', '#ffd166', '#a2d2ff', '#cdb4db', '#ffffff'][r() * 5 | 0],
+      });
+    }
+    items.sort((a, b) => a.y - b.y);
+    for (let x = 30 + r() * 40; x < W - 20; x += 70 + r() * 90) eyes.push({ x, ph: r() * 10, s: 0.8 + r() * 0.4 });
+    // wide screens: scattered pine trees on both sides of the meadow, thinning out towards the play area
+    if (FX > 0) {
+      for (const [x0, x1, inner] of [[-FX, -34, -34], [W + 34, W + FX, W + 34]]) {
+        for (let y = 40; y < H + 60; y += 64) {
+          for (let x = x0 + 10; x < x1; x += 70) {
+            const px = Math.min(x1, x + r() * 40), near = 1 - Math.min(1, Math.abs(px - inner) / 220);
+            if (r() < 0.25 + near * 0.35) continue;
+            side.push({ x: px, y: y + r() * 30, h: 52 + r() * 34, c: r() * 3 | 0 });
+          }
+        }
+        for (let i = 0; i < FX * H / 5000; i++) side.push({ x: x0 + r() * (x1 - x0), y: r() * H, tuft: true });
+      }
+      side.sort((a, b) => a.y - b.y);
+    }
+    return (scene = { patches, items, eyes, side });
+  }
+
+  const DOODLE = {
+    tuft() {
+      ctx.strokeStyle = '#6a9a4f'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (const [x, h] of [[-6, 9], [0, 13], [6, 9]]) { ctx.moveTo(x * 0.3, 0); ctx.quadraticCurveTo(x * 0.4, -h * 0.6, x, -h); }
+      ctx.stroke();
+    },
+    flower(t) {
+      ctx.strokeStyle = '#6a9a4f'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -12); ctx.stroke();
+      ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 1; ctx.fillStyle = t.color;
+      for (let i = 0; i < 5; i++) {
+        const a = i / 5 * Math.PI * 2;
+        ctx.beginPath(); ctx.arc(Math.cos(a) * 3.6, -15 + Math.sin(a) * 3.6, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+      ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, -15, 2.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    },
+    rock() {
+      ctx.fillStyle = '#c9c5bb'; ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.quadraticCurveTo(-9, -9, -1, -9); ctx.quadraticCurveTo(9, -9, 9, 0); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(-3, -5, 2, 0, Math.PI * 2); ctx.fill();
+    },
+    mushroom() {
+      ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 1.5;
+      ctx.fillStyle = '#fff6e5'; ctx.fillRect(-2.5, -8, 5, 8); ctx.strokeRect(-2.5, -8, 5, 8);
+      ctx.fillStyle = '#e76f51';
+      ctx.beginPath(); ctx.arc(0, -8, 8, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3, -11, 1.5, 0, Math.PI * 2); ctx.arc(3, -10, 1.2, 0, Math.PI * 2); ctx.fill();
+    },
+  };
+
+  function drawGround() {
+    const sc = getScene();
+    ctx.fillStyle = '#e3eec0';
+    ctx.fillRect(0, 0, W, H);
+    // soft, darker and lighter patches break up the flat colour without drawing lines
+    for (const p of sc.patches) {
+      ctx.fillStyle = p.light ? 'rgba(255,255,240,.2)' : 'rgba(150,185,110,.14)';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const t of sc.items) {
+      ctx.save(); ctx.translate(t.x, t.y); ctx.scale(t.s, t.s);
+      DOODLE[t.kind](t);
+      ctx.restore();
+    }
+    ctx.restore();
+    if (FX) {
+      // shade the edges of the clearing so the forest reads as a boundary
+      for (const [x, dir] of [[0, 1], [W, -1]]) {
+        const g = ctx.createLinearGradient(x, 0, x + dir * 30, 0);
+        g.addColorStop(0, 'rgba(40,60,45,.25)'); g.addColorStop(1, 'rgba(40,60,45,0)');
+        ctx.fillStyle = g; ctx.fillRect(Math.min(x, x + dir * 30), 0, 30, H);
+      }
+    }
+  }
+
+  function drawButterflies(now) {
+    if (reducedMotion) return;
+    const t = now / 1000, top = fieldTop + 80, span = villageY() - 60 - top;
+    ctx.save();
+    ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 1.2;
+    [['#ffafcc', 0], ['#a2d2ff', 3.7]].forEach(([c, ph]) => {
+      const x = W / 2 + Math.sin(t * 0.23 + ph) * W * 0.38 + Math.sin(t * 1.3 + ph) * 18;
+      const y = top + span * (0.5 + 0.4 * Math.sin(t * 0.17 + ph * 2)) + Math.sin(t * 2.1 + ph) * 10;
+      const flap = 0.25 + Math.abs(Math.sin(t * 11 + ph)) * 0.75;
+      ctx.fillStyle = c;
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.ellipse(x + s * 5 * flap, y - 2, 5 * flap, 6, s * 0.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+      ctx.fillStyle = '#2b2d42'; ctx.fillRect(x - 1, y - 6, 2, 9);
+    });
+    ctx.restore();
+  }
+
+  // the scenery never moves, so it's painted once into an offscreen canvas and reused every frame
+  const bg = document.createElement('canvas');
+  let bgFor = null;
+  function drawBackground() {
+    const sc = getScene();
+    if (bgFor !== sc) {
+      bgFor = sc;
+      bg.width = cvs.width; bg.height = cvs.height;
+      const main = ctx;
+      ctx = bg.getContext('2d');
+      ctx.setTransform(cvs.width / VW, 0, 0, cvs.height / H, 0, 0);
+      if (FX) drawSides();
+      ctx.translate(FX, 0);
+      drawGround();
+      ctx = main;
+    }
+    ctx.drawImage(bg, 0, 0, VW, H);
+  }
+
+  // a doodled pine tree standing at (x, y), h tall
+  function pine(x, y, h, fill) {
+    const w = h * 0.36;
+    ctx.fillStyle = '#8a5a35';
+    ctx.fillRect(x - h * 0.05, y - h * 0.16, h * 0.1, h * 0.16); ctx.strokeRect(x - h * 0.05, y - h * 0.16, h * 0.1, h * 0.16);
+    ctx.fillStyle = fill;
+    for (let k = 0; k < 3; k++) {
+      const by = y - h * (0.12 + k * 0.24), hw = w * (1 - k * 0.22);
+      ctx.beginPath(); ctx.moveTo(x - hw, by); ctx.lineTo(x, by - h * 0.42); ctx.lineTo(x + hw, by); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // wide screens: the meadow carries on past the play area, a little darker, with pine trees
+  function drawSides() {
+    const greens = ['#4f7d5c', '#5c8a62', '#467352'];
+    ctx.fillStyle = '#cbdca3'; ctx.fillRect(0, 0, VW, H);
+    ctx.save();
+    ctx.translate(FX, 0);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const c of getScene().side) {
+      ctx.save(); ctx.translate(c.x, c.y);
+      if (c.tuft) DOODLE.tuft();
+      ctx.restore();
+    }
+    ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 2;
+    for (const c of getScene().side) if (!c.tuft) pine(c.x, c.y, c.h, greens[c.c]);
+    ctx.restore();
+  }
+
+  function drawVillage(now, threat) {
+    const vy = villageY();
+    ctx.fillStyle = '#f0e2bf';
+    ctx.fillRect(0, vy + 6, W, H - vy);
+    ctx.fillStyle = 'rgba(160,120,70,.12)';
+    for (let x = 18; x < W; x += 46) { ctx.beginPath(); ctx.ellipse(x, vy + 30 + (x * 7 % 40), 6, 3, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = '#e76f51'; ctx.lineWidth = 2.5; ctx.setLineDash([12, 9]);
+    ctx.beginPath(); ctx.moveTo(0, vy); ctx.lineTo(W, vy); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const roofs = ['#e63946', '#3a86ff', '#ffb703', '#8338ec', '#2a9d8f'];
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#2b2d42'; ctx.lineJoin = 'round';
+    for (let i = 0; i < MAX_HP; i++) {
+      const x = houseX(i), base = H - 14, hw = 24, h = 36;
+      if (!S.houses[i]) {
+        // rubble
+        ctx.fillStyle = '#b0b0b0';
+        for (const [dx, dy, r] of [[-16, -6, 8], [0, -10, 11], [15, -6, 8], [-6, -20, 7], [9, -21, 6]]) {
+          ctx.beginPath(); ctx.arc(x + dx, base + dy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.fillStyle = roofs[i];
+        ctx.save(); ctx.translate(x + 4, base - 30); ctx.rotate(0.5);
+        ctx.fillRect(-14, -4, 28, 8); ctx.strokeRect(-14, -4, 28, 8); ctx.restore();
+        ctx.fillStyle = 'rgba(120,120,120,.25)';
+        const sm = (now / 1000 + i) % 2;
+        ctx.beginPath(); ctx.arc(x - 4 + sm * 6, base - 40 - sm * 20, 6 + sm * 6, 0, Math.PI * 2); ctx.fill();
+        continue;
+      }
+      const scared = threat.has(i);
+      ctx.fillStyle = '#c9ada7';
+      ctx.fillRect(x + 9, base - h - 30, 8, 18); ctx.strokeRect(x + 9, base - h - 30, 8, 18);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x - hw, base - h, hw * 2, h); ctx.strokeRect(x - hw, base - h, hw * 2, h);
+      ctx.fillStyle = roofs[i];
+      ctx.beginPath(); ctx.moveTo(x - hw - 7, base - h); ctx.lineTo(x, base - h - 26); ctx.lineTo(x + hw + 7, base - h); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#8d5524';
+      ctx.fillRect(x - 6, base - 18, 12, 18); ctx.strokeRect(x - 6, base - 18, 12, 18);
+      // a villager peeks out of the window, and panics when a monster gets close to their house
+      ctx.fillStyle = '#bde0fe';
+      ctx.fillRect(x + 8, base - 31, 12, 12);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x + 8, base - 31, 12, 12); ctx.clip();
+      const fx = x + 14 + (scared && !reducedMotion ? Math.sin(now / 30) * 1.5 : 0);
+      const fy = base - 22 + (scared ? -2 : Math.sin(now / 700 + i * 2) * 1.5);
+      ctx.fillStyle = '#ffd6a5'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(fx, fy, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#2b2d42';
+      ctx.beginPath(); ctx.arc(fx - 1.7, fy - 1, 0.9, 0, Math.PI * 2); ctx.arc(fx + 1.7, fy - 1, 0.9, 0, Math.PI * 2); ctx.fill();
+      if (scared) { ctx.beginPath(); ctx.arc(fx, fy + 2, 1.1, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(x + 8, base - 31, 12, 12);
+      if (scared) {
+        ctx.font = `bold 22px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#e63946'; ctx.fillText('!', x - 14, base - h - 18 - Math.abs(Math.sin(now / 150)) * 4);
+      } else if (!reducedMotion) {
+        // chimney smoke
+        ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(141,153,174,.6)';
+        for (let k = 0; k < 3; k++) {
+          const p = (now / 1600 + k / 3 + i * 0.37) % 1;
+          ctx.globalAlpha = 1 - p;
+          ctx.beginPath(); ctx.arc(x + 13 + Math.sin(p * 6 + i) * 4, base - h - 34 - p * 34, 3 + p * 5, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.globalAlpha = 1; ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 2.5;
+      }
+    }
+  }
+
+  // the dark pine forest under the HUD: monsters walk out of it, and eyes blink between the trees
+  function drawEntrance(now) {
+    if (!fieldTop) return;
+    const y = fieldTop - 6;
+    ctx.fillStyle = '#26392e';
+    ctx.fillRect(0, 0, W, y);
+    const shade = ctx.createLinearGradient(0, y, 0, y + 26);
+    shade.addColorStop(0, 'rgba(38,57,46,.45)'); shade.addColorStop(1, 'rgba(38,57,46,0)');
+    ctx.fillStyle = shade; ctx.fillRect(0, y, W, 26);
+    ctx.strokeStyle = '#1a2a21'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    for (let x = 10, i = 0; x < W + 30; x += 30, i++) pine(x, y + 8, 46 + (i * 7 % 5) * 3, '#2f4a3a');
+    for (const e of getScene().eyes) {
+      // each pair blinks on its own rhythm
+      const blink = reducedMotion ? 1 : Math.max(0.1, Math.min(1, Math.abs(Math.sin(now / 1300 + e.ph)) * 6));
+      const look = reducedMotion ? 0 : Math.sin(now / 1100 + e.ph) * 1.2;
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#ffe066';
+        ctx.beginPath(); ctx.ellipse(e.x + s * 5 * e.s, y - 4, 3.2 * e.s, 3.2 * e.s * blink, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1f3328';
+        ctx.beginPath(); ctx.ellipse(e.x + s * 5 * e.s + look, y - 4, 1.3 * e.s, 1.3 * e.s * blink, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // a sparser front row of lighter pines along the forest edge
+    ctx.strokeStyle = '#1a2a21';
+    for (let x = 36, i = 0; x < W + 30; x += 64, i++) pine(x + (i * 13 % 17), y + 18, 38 + (i * 5 % 4) * 3, '#3f6b4f');
+  }
+
+  function drawWalls() {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const w of S.walls) {
+      // walls blink before they disappear so it never feels unfair
+      const blink = w.life < 2 && Math.sin(w.life * 20) > 0 ? 0.4 : 1;
+      ctx.globalAlpha = Math.max(0.35, w.hp / 100) * blink;
+      tracePath(w.pts); ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 15; ctx.stroke();
+      tracePath(w.pts); ctx.strokeStyle = '#8d5524'; ctx.lineWidth = 11; ctx.stroke();
+      tracePath(w.pts, 0, -2); ctx.strokeStyle = '#c68b59'; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawMonster(m, danger = false) {
+    const T = TYPES[m.type], r = m.r;
+    ctx.save();
+    ctx.translate(m.x, m.y + (T.fly ? Math.sin(m.t * 6) * 4 : -Math.abs(Math.sin(m.t * 8)) * 3));
+
+    if (danger) {
+      const pulse = 0.5 + 0.5 * Math.sin(m.t * 12);
+      ctx.beginPath(); ctx.arc(0, 0, r + 8 + pulse * 5, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(230,57,70,${0.4 + pulse * 0.5})`; ctx.lineWidth = 4; ctx.stroke();
+    }
+
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#2b2d42';
+    if (T.fly) {
+      const f = Math.sin(m.t * 18) * 0.6;
+      ctx.fillStyle = 'rgba(255,255,255,.95)';
+      for (const s of [-1, 1]) {
+        ctx.save(); ctx.translate(s * r * 0.8, -r * 0.2); ctx.rotate(s * (0.3 + f));
+        ctx.beginPath(); ctx.ellipse(s * r * 0.5, 0, r * 0.7, r * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke(); ctx.restore();
+      }
+    }
+
+    ctx.beginPath();
+    for (let i = 0; i <= 18; i++) {
+      const a = i / 18 * Math.PI * 2, rr2 = r * (1 + Math.sin(a * 3 + m.t * 5 + m.wob) * 0.06);
+      i ? ctx.lineTo(Math.cos(a) * rr2, Math.sin(a) * rr2) : ctx.moveTo(Math.cos(a) * rr2, Math.sin(a) * rr2);
+    }
+    ctx.closePath();
+    ctx.fillStyle = m.hit > 0 ? '#ffffff' : m.stun > 0 ? '#ffe66d' : T.color;
+    ctx.fill(); ctx.stroke();
+
+    if (m.type === 'tank') {
+      ctx.fillStyle = '#2b2d42';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * r * 0.5, -r * 0.8); ctx.lineTo(s * r * 0.75, -r * 1.25); ctx.lineTo(s * r * 0.85, -r * 0.65); ctx.fill(); }
+    }
+    if (m.type === 'boss') {
+      ctx.fillStyle = '#ffd166'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-r * 0.5, -r * 0.78);
+      for (const [x, y] of [[-0.55, -1.25], [-0.27, -1], [0, -1.32], [0.27, -1], [0.55, -1.25], [0.5, -0.78]]) ctx.lineTo(x * r, y * r);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    const pipY = -r * (m.type === 'boss' ? 1.32 : 1) - 12;
+
+    const er = r * 0.28;
+    for (const s of [-1, 1]) {
+      ctx.beginPath(); ctx.arc(s * r * 0.35, -r * 0.15, er, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(s * r * 0.35 + Math.sin(m.t * 3 + s) * er * 0.3, -r * 0.15 + er * 0.35, er * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#2b2d42'; ctx.fill();
+    }
+    const mo = m.blocked ? Math.abs(Math.sin(m.t * 14)) * r * 0.25 : r * 0.07;
+    ctx.beginPath(); ctx.ellipse(0, r * 0.42, r * 0.3, mo + 1, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#2b2d42'; ctx.fill();
+
+    if (m.maxHp > 1) {
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < m.maxHp; i++) {
+        ctx.beginPath(); ctx.arc((i - (m.maxHp - 1) / 2) * 10, pipY, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = i < m.hp ? '#ff6b6b' : '#ddd'; ctx.fill(); ctx.stroke();
+      }
+    }
+    if (m.stun > 0) {
+      ctx.fillStyle = '#f8961e'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let i = 0; i < 3; i++) {
+        const a = m.t * 5 + i * 2.1;
+        ctx.fillText('✦', Math.cos(a) * r * 0.9, -r - 2 + Math.sin(a) * 5);
+      }
+    }
+    if (danger) {
+      ctx.font = `bold 22px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e63946'; ctx.fillText('!', 0, m.maxHp > 1 ? pipY - 14 : -r - 14);
+    }
+    ctx.restore();
+  }
+
+  function drawFx() {
+    for (const f of S.fx) {
+      const k = 1 - f.t / f.dur;
+      if (f.kind === 'lasso') {
+        ctx.save();
+        ctx.shadowColor = '#ff4d8d'; ctx.shadowBlur = 18;
+        tracePath(f.pts); ctx.closePath();
+        ctx.fillStyle = `rgba(255,77,141,${0.18 * k})`; ctx.fill();
+        ctx.strokeStyle = '#ff4d8d'; ctx.lineWidth = 7 * k + 1; ctx.globalAlpha = k; ctx.stroke();
+        ctx.restore();
+      } else if (f.kind === 'bolt') {
+        const jag = f.pts.map((p, i) => (i === 0 || i === f.pts.length - 1) ? p : { x: p.x + (Math.random() - 0.5) * 10, y: p.y + (Math.random() - 0.5) * 10 });
+        ctx.save();
+        ctx.globalAlpha = k; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.shadowColor = '#f9c74f'; ctx.shadowBlur = 25;
+        tracePath(jag); ctx.strokeStyle = '#f9c74f'; ctx.lineWidth = 9; ctx.stroke();
+        tracePath(jag); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = `rgba(255,250,200,${(reducedMotion ? 0.08 : 0.25) * k})`; ctx.fillRect(0, 0, W, H);
+      } else if (f.kind === 'ring') {
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (1.3 - k * 0.6), 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(43,45,66,${k})`; ctx.lineWidth = 3; ctx.stroke();
+      } else if (f.kind === 'redflash') {
+        ctx.fillStyle = `rgba(230,57,70,${(reducedMotion ? 0.12 : 0.3) * k})`; ctx.fillRect(0, 0, W, H);
+      }
+    }
+  }
+
+  function drawPill(x, y, text, color) {
+    ctx.font = `20px ${FONT}`;
+    const w = ctx.measureText(text).width + 22;
+    x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, x));
+    y = Math.max(fieldTop + 24, y);
+    rr(x - w / 2, y - 16, w, 32, 16);
+    ctx.fillStyle = '#fffdf7'; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = color; ctx.stroke();
+    ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 1);
+  }
+
+  function drawStroke(now) {
+    if (!stroke || stroke.pts.length < 2) return;
+    const lowInk = mode === 'play' && S.ink < 10;
+    const color = lowInk ? '#e63946' : KIND[stroke.kind].color;
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (lowInk) ctx.setLineDash([6, 8]);
+    tracePath(stroke.pts); ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.stroke();
+    tracePath(stroke.pts, 1, 1); ctx.strokeStyle = 'rgba(43,45,66,.25)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+
+    const start = stroke.pts[0], cur = stroke.pts[stroke.pts.length - 1];
+    // "close the loop" target once the stroke is long enough to become a lasso
+    if (stroke.len > 80 && stroke.kind !== 'lasso' && dist(start, cur) < 140) {
+      const pulse = 0.5 + 0.5 * Math.sin(now / 120);
+      ctx.beginPath(); ctx.arc(start.x, start.y, 14 + pulse * 6, 0, Math.PI * 2);
+      ctx.setLineDash([4, 5]); ctx.strokeStyle = '#ff4d8d'; ctx.lineWidth = 3; ctx.stroke(); ctx.setLineDash([]);
+    }
+    if (stroke.len > POKE_LEN) drawPill(cur.x, cur.y - 58, KIND[stroke.kind].label, color);
+  }
+
+  function drawDemo() {
+    if (mode !== 'tutorial' || stroke || S.tut.wait > 0) return;
+    const pts = TUT[S.tut.step].demo();
+    const cycle = 2.8, t = S.tut.demoT % cycle, p = Math.min(1, t / 1.9);
+    const n = Math.max(2, Math.ceil(pts.length * p));
+    ctx.save();
+    ctx.globalAlpha = t > 2.3 ? Math.max(0, 1 - (t - 2.3) / 0.5) : 1;
+    ctx.setLineDash([2, 11]); ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(43,45,66,.55)'; ctx.lineWidth = 6;
+    tracePath(pts.slice(0, n)); ctx.stroke();
+    const h = pts[n - 1];
+    ctx.font = '38px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('👆', h.x + 4, h.y - 4);
+    ctx.restore();
+  }
+
+  function drawIntro() {
+    if (mode !== 'play' || !S.between || !S.intro) return;
+    const T = TYPES[S.intro];
+    const w = Math.min(360, W - 32), h = 132, x = (W - w) / 2, y = H * 0.36 - h / 2;
+    ctx.save();
+    rr(x + 5, y + 5, w, h, 16); ctx.fillStyle = '#2b2d42'; ctx.fill();
+    rr(x, y, w, h, 16); ctx.fillStyle = '#fffdf7'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#2b2d42'; ctx.stroke();
+    const t = performance.now() / 1000;
+    drawMonster({ type: S.intro, r: Math.min(30, T.r * 1.4), x: x + 56, y: y + h / 2 + 4, t, wob: 0, hit: 0, stun: 0, blocked: false, hp: T.hp, maxHp: T.hp });
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#e76f51'; ctx.font = `17px ${FONT}`;
+    ctx.fillText('NEW MONSTER!', x + 108, y + 32);
+    ctx.fillStyle = '#2b2d42'; ctx.font = `30px ${FONT}`;
+    ctx.fillText(T.name, x + 108, y + 62);
+    ctx.font = `18px ${FONT}`;
+    wrapText(T.intro, x + 108, y + 86, w - 120, 20);
+    ctx.textAlign = 'center'; ctx.font = `16px ${FONT}`; ctx.fillStyle = '#888';
+    ctx.fillText(`Wave ${S.wave + 1} in ${Math.ceil(Math.max(0, S.waveDelay))}…`, x + w / 2, y + h + 26);
+    ctx.restore();
+  }
+  function wrapText(text, x, y, maxW, lh) {
+    let line = '';
+    for (const word of text.split(' ')) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, y); line = word; y += lh; }
+      else line = test;
+    }
+    ctx.fillText(line, x, y);
+  }
+
+  function render(now) {
+    ctx.save();
+    if (S.shake > 0) ctx.translate((Math.random() - 0.5) * S.shake, (Math.random() - 0.5) * S.shake);
+    drawBackground();
+    ctx.translate(FX, 0);
+    if (FX) { ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); }
+    drawButterflies(now);
+    const dangerY = villageY() - 140, threat = new Set();
+    if (mode === 'play') for (const m of S.monsters) if (m.y > dangerY) threat.add(nearestHouse(m.x));
+    drawVillage(now, threat);
+    drawWalls();
+    for (const m of S.monsters) drawMonster(m, mode === 'play' && m.y > dangerY);
+    drawEntrance(now);
+    drawFx();
+
+    for (const p of S.particles) {
+      ctx.globalAlpha = Math.min(1, p.life * 2);
+      ctx.fillStyle = p.color; ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    drawDemo();
+    drawStroke(now);
+    drawIntro();
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const l of S.labels) {
+      const k = l.t / l.dur, pop = Math.min(1, l.t * 8);
+      ctx.globalAlpha = 1 - k * k;
+      ctx.font = `${Math.round(l.size * (0.6 + 0.4 * pop))}px ${FONT}`;
+      ctx.lineWidth = 5; ctx.strokeStyle = '#fdfaf2';
+      ctx.strokeText(l.text, l.x, l.y - k * 40);
+      ctx.fillStyle = l.color; ctx.fillText(l.text, l.x, l.y - k * 40);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ---------- HUD ----------
+  let lastHouses = '';
+  function hud() {
+    const key = S.houses.join();
+    if (key !== lastHouses) {
+      lastHouses = key;
+      $('houses').innerHTML = S.houses.map(up => `<span class="${up ? '' : 'gone'}">🏠</span>`).join('');
+      $('houses').setAttribute('aria-label', `${S.hp} houses left`);
+    }
+    $('wave').textContent = Math.max(1, S.wave);
+    $('score').textContent = S.score;
+    const f = $('inkFill');
+    f.style.width = (S.ink / MAX_INK * 100) + '%';
+    f.classList.toggle('low', S.ink < 20);
+  }
+
+  // ---------- flow ----------
+  const show = id => $(id).classList.remove('hidden');
+  const hide = id => $(id).classList.add('hidden');
+  function hideOverlays() { ['start', 'pause', 'over'].forEach(hide); }
+
+  function goMenu() {
+    mode = 'menu';
+    stroke = null;
+    S = newState();
+    hideOverlays(); hideCoach(); hide('hud');
+    const best = store.get('best', 0);
+    $('bestStart').textContent = best ? `🏆 Best score: ${best}` : '';
+    show('start');
+    $('playBtn').focus();
+  }
+  function startTutorial() {
+    initAudio();
+    S = newState();
+    mode = 'tutorial';
+    stroke = null;
+    S.tut = { step: 0, wait: 0, demoT: 0 };
+    hideOverlays(); show('hud');
+    setupStep();
+  }
+  function startPlay(afterTutorial = false) {
+    initAudio();
+    S = newState();
+    mode = 'play';
+    stroke = null;
+    hideOverlays(); show('hud');
+    if (afterTutorial) setCoach("You're ready! 🎉", 'Protect your 5 houses. Ink ✏️ refills over time.', '', 4);
+    else hideCoach();
+  }
+  function play() { store.get('tutDone', false) ? startPlay() : startTutorial(); }
+
+  function pause() {
+    if (!active()) return;
+    S.prevMode = mode;
+    mode = 'paused';
+    stroke = null;
+    show('pause');
+    $('resumeBtn').focus();
+  }
+  function resume() {
+    if (mode !== 'paused') return;
+    mode = S.prevMode;
+    hide('pause');
+    lastTime = performance.now();
+  }
+
+  function pickTip() {
+    const st = S.stats, lk = st.leaks;
+    const worst = Object.keys(lk).sort((a, b) => lk[b] - lk[a])[0];
+    if (worst === 'boss') return '💡 Bosses are slow but tough. Wall them, then lasso (3) and zap (2) again and again.';
+    if (worst === 'flyer') return '💡 Flyers fly over walls. Zap or lasso them instead.';
+    if (worst === 'tank') return '💡 Tanks take 4 hits. A lasso (3) plus a poke finishes them.';
+    if (worst === 'runner') return '💡 Runners are fast. Drop a wall early, then lasso the pile-up!';
+    if (!st.moves.lasso) return '💡 Circle a group of monsters for a big combo!';
+    if (!st.moves.zap) return '💡 Zigzags zap AND stun everything they touch.';
+    return '💡 Walls bunch monsters together. Then one lasso gets them all!';
+  }
+
+  function gameOver() {
+    mode = 'over';
+    stroke = null;
+    const isBest = S.score > S.best;
+    if (isBest) { S.best = S.score; store.set('best', S.score); }
+    $('finalScore').textContent = S.score;
+    $('newBest').classList.toggle('hidden', !isBest);
+    $('stWave').textContent = S.wave;
+    $('stKills').textContent = S.stats.kills;
+    $('stCombo').textContent = S.stats.bestCombo > 1 ? `${S.stats.bestCombo}x` : '-';
+    $('tip').textContent = pickTip();
+    $('bestOver').textContent = isBest ? '' : `🏆 Best: ${S.best}`;
+    setTimeout(() => { if (mode === 'over') { show('over'); $('againBtn').focus(); } }, 900);
+  }
+
+  $('playBtn').addEventListener('click', play);
+  $('howBtn').addEventListener('click', startTutorial);
+  $('skipBtn').addEventListener('click', () => { store.set('tutDone', true); startPlay(true); });
+  $('pauseBtn').addEventListener('click', pause);
+  $('resumeBtn').addEventListener('click', resume);
+  $('restartBtn').addEventListener('click', () => S.prevMode === 'tutorial' ? startTutorial() : startPlay());
+  $('pauseHowBtn').addEventListener('click', startTutorial);
+  $('pauseMenuBtn').addEventListener('click', goMenu);
+  $('againBtn').addEventListener('click', () => startPlay());
+  $('overMenuBtn').addEventListener('click', goMenu);
+  addEventListener('keydown', e => {
+    if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') mode === 'paused' ? resume() : pause();
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+  // Android back button (only inside the Capacitor app): pause, then resume; leave from the menu
+  const capApp = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins?.App : null;
+  if (capApp) {
+    capApp.addListener('backButton', () => {
+      if (active()) pause();
+      else if (mode === 'paused') resume();
+      else if (mode === 'over') goMenu();
+      else capApp.minimizeApp();
+    });
+  }
+
+  goMenu();
+
+  let lastTime = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    if (mode === 'play') updatePlay(dt);
+    else if (mode === 'tutorial') updateTutorial(dt);
+    else if (mode === 'menu') updateMenu(dt);
+    if (mode !== 'paused') updateFx(dt);
+    render(now);
+    if (mode !== 'menu') hud();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
